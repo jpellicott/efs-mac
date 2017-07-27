@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
 from .forms import *
 from django.db.models import Sum
-
+from django.db.models import Sum
 
 
 def home(request):
@@ -108,9 +108,9 @@ def investment_new(request):
        form = InvestmentForm(request.POST)
        if form.is_valid():
            investment = form.save(commit=False)
-           investment.created_date = timezone.now()
+           investment.updated_date = timezone.now()
            investment.save()
-           investments = investment.objects.filter(purchase_date__lte=timezone.now())
+           investments = Investment.objects.filter(acquired_date__lte=timezone.now())
            return render(request, 'portfolio/investment_list.html',
                          {'investments': investments})
    else:
@@ -122,7 +122,7 @@ def investment_new(request):
 def investment_edit(request, pk):
    investment = get_object_or_404(Investment, pk=pk)
    if request.method == "POST":
-       form = StockForm(request.POST, instance=investment)
+       form = InvestmentForm(request.POST, instance=investment)
        if form.is_valid():
            investment = form.save()
            # stock.customer = stock.id
@@ -132,7 +132,7 @@ def investment_edit(request, pk):
            return render(request, 'portfolio/investment_list.html', {'investments': investments})
    else:
        # print("else")
-       form = StockForm(instance=investment)
+       form = InvestmentForm(instance=investment)
    return render(request, 'portfolio/investment_edit.html', {'form': form})
 
 @login_required
@@ -142,16 +142,44 @@ def investment_delete(request, pk):
    investments = Investment.objects.filter(acquired_date__lte=timezone.now())
    return render(request, 'portfolio/investment_list.html', {'investments': investments})
 
-
 @login_required
 def portfolio(request,pk):
    customer = get_object_or_404(Customer, pk=pk)
    customers = Customer.objects.filter(created_date__lte=timezone.now())
    investments =Investment.objects.filter(customer=pk)
    stocks = Stock.objects.filter(customer=pk)
+   sum_recent_value = Investment.objects.filter(customer=pk).aggregate(Sum('recent_value'))
+
    sum_acquired_value = Investment.objects.filter(customer=pk).aggregate(Sum('acquired_value'))
 
 
    return render(request, 'portfolio/portfolio.html', {'customers': customers, 'investments': investments,
                                                       'stocks': stocks,
-                                                      'sum_acquired_value': sum_acquired_value,})
+                                                       'sum_recent_value': sum_recent_value,
+                                                       'sum_acquired_value': sum_acquired_value,})
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import CustomerSerializer
+
+# List at the end of the views.py
+# Lists all customers
+class CustomerList(APIView):
+
+    def get(self,request):
+        customers_json = Customer.objects.all()
+        serializer = CustomerSerializer(customers_json, many=True)
+        return Response(serializer.data)
+
+    def portfolio(request):
+        customers = Customer.objects.filter(created_date__lte=timezone.now())
+        investments = Investment.objects.all()
+        stocks = Stock.objects.all()
+        sum_recent_value = Investment.objects.all().aggregate(Sum('recent_value'))
+        sum_acquired_value = Investment.objects.all().aggregate(Sum('acquired_value'))
+
+        return render(request, 'customers/portfolio.html', {'customers': customers, 'investments': investments,
+                                                            'stocks': stocks,
+                                                            'sum_recent_value': sum_recent_value,
+                                                            'sum_acquired_value': sum_acquired_value, })
